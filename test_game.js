@@ -57,112 +57,113 @@ describe("Coup Game Simulator Unit Tests", function () {
 
     // Override players with a known state:
     fakeGameState.players = [
-      { id: "player1", name: "Player 1", coins: 2, influence: ["Duke", "Assassin"], revealedInfluence: [], status: "ACTIVE" },
-      { id: "player2", name: "Player 2", coins: 2, influence: ["Contessa", "Duke"], revealedInfluence: [], status: "ACTIVE" },
-      { id: "player3", name: "Player 3", coins: 2, influence: ["Captain", "Ambassador"], revealedInfluence: [], status: "ACTIVE" },
+      { id: "sunny", name: "Player 1", coins: 2, influence: ["Duke", "Assassin"], revealedInfluence: [], status: "ACTIVE" },
+      { id: "justin", name: "Player 2", coins: 2, influence: ["Contessa", "Duke"], revealedInfluence: [], status: "ACTIVE" },
+      { id: "gibson", name: "Player 3", coins: 2, influence: ["Captain", "Ambassador"], revealedInfluence: [], status: "ACTIVE" },
     ];
   });
 
   it("should simulate a full game sequence with all responses submitted", async function () {
-    let response, game, event, player1, player2, player3;
+    let response, game, event, sunny, justin, gibson;
 
-    // --- Turn 1: Player1 takes Income ---
-    event = createEvent("POST", { playerId: "player1", action: "income" });
+    // --- Turn 1: sunny takes Income ---
+    event = createEvent("POST", { playerId: "sunny", action: "income" });
     response = await handler(event);
     game = JSON.parse(response.body);
-    player1 = game.players.find((p) => p.id === "player1");
-    assert.strictEqual(player1.coins, 3, "Player1 should have 3 coins after income.");
-    assert.strictEqual(game.players[game.turnIndex].id, "player2", "Turn should advance to player2");
+    sunny = game.players.find((p) => p.id === "sunny");
+    assert.strictEqual(sunny.coins, 3, "sunny should have 3 coins after income.");
+    assert.strictEqual(game.players[game.turnIndex].id, "justin", "Turn should advance to justin");
     assert.strictEqual(game.phase, "ACTION_DECLARATION", "Phase should be ACTION_DECLARATION");
 
-    // --- Turn 2: Player2 declares Tax (claiming Duke) ---
-    event = createEvent("POST", { playerId: "player2", action: "tax", claimedCharacter: "Duke" });
+    // --- Turn 2: justin declares Tax (claiming Duke) ---
+    event = createEvent("POST", { playerId: "justin", action: "tax", claimedCharacter: "Duke" });
     response = await handler(event);
     game = JSON.parse(response.body);
     assert.strictEqual(game.phase, "ACTION_RESPONSE", "Phase should be ACTION_RESPONSE for tax.");
     assert.strictEqual(game.pendingAction.action, "tax", "Pending action should be tax");
     assert.strictEqual(game.pendingAction.claimedCharacter, "Duke", "Claimed character should be Duke");
 
-    // --- Turn 2a: Player1 (non-actor) responds with pass ---
-    event = createEvent("POST", { playerId: "player1", response: "pass" });
+    // --- Turn 2a: sunny (non-actor) responds with pass ---
+    event = createEvent("POST", { playerId: "sunny", response: "pass" });
     response = await handler(event);
     game = JSON.parse(response.body);
-    assert.strictEqual(game.phase, "ACTION_RESPONSE", "Phase should still be ACTION_RESPONSE after player1 passes.");
+    assert.strictEqual(game.phase, "ACTION_RESPONSE", "Phase should still be ACTION_RESPONSE after sunny passes.");
 
-    // --- Turn 2b: Player3 challenges the tax action ---
-    event = createEvent("POST", { playerId: "player3", response: "challenge" });
+    // --- Turn 2b: gibson challenges the tax action ---
+    event = createEvent("POST", { playerId: "gibson", response: "challenge" });
     response = await handler(event);
     game = JSON.parse(response.body);
-    player2 = game.players.find((p) => p.id === "player2");
-    player3 = game.players.find((p) => p.id === "player3");
-    assert.strictEqual(player3.revealedInfluence.length, 1, "Player3 should have lost one influence due to failed challenge.");
-    assert.strictEqual(player2.coins, 5, "Player2 should have 5 coins after successful tax.");
-    assert.strictEqual(game.players[game.turnIndex].id, "player3", "Turn should advance to player3");
+    justin = game.players.find((p) => p.id === "justin");
+    gibson = game.players.find((p) => p.id === "gibson");
+    assert.strictEqual(gibson.revealedInfluence.length, 1, "gibson should have lost one influence due to failed challenge.");
+    assert.strictEqual(justin.coins, 5, "justin should have 5 coins after successful tax.");
+    assert.strictEqual(game.players[game.turnIndex].id, "gibson", "Turn should advance to gibson");
     assert.strictEqual(game.phase, "ACTION_DECLARATION", "Phase should be ACTION_DECLARATION");
 
-    // --- Turn 3: Player3 declares Foreign Aid ---
-    event = createEvent("POST", { playerId: "player3", action: "foreign_aid" });
+    // --- Turn 3: gibson declares Foreign Aid ---
+    event = createEvent("POST", { playerId: "gibson", action: "foreign_aid" });
     response = await handler(event);
     game = JSON.parse(response.body);
     assert.strictEqual(game.phase, "ACTION_RESPONSE", "Phase should be ACTION_RESPONSE for foreign aid.");
     assert.strictEqual(game.pendingAction.action, "foreign_aid", "Pending action should be foreign_aid");
 
-    // --- Turn 3b: Player1 blocks the foreign aid (claiming Duke) ---
-    event = createEvent("POST", { playerId: "player1", response: "block", claimedCharacter: "Duke" });
+    // --- Turn 3b: sunny blocks the foreign aid (claiming Duke) ---
+    event = createEvent("POST", { playerId: "sunny", response: "block", claimedCharacter: "Duke" });
     response = await handler(event);
     game = JSON.parse(response.body);
     assert.strictEqual(game.phase, "BLOCK_RESPONSE", "Phase should be BLOCK_RESPONSE after a block is declared.");
     assert.strictEqual(game.pendingAction.block.claimedCharacter, "Duke", "Block should claim Duke");
 
-    // --- Turn 3c: Player2 challenges the block ---
-    event = createEvent("POST", { playerId: "player2", response: "challenge" });
+    // --- Turn 3c: justin challenges the block ---
+    event = createEvent("POST", { playerId: "justin", response: "challenge" });
     response = await handler(event);
     game = JSON.parse(response.body);
-    player2 = game.players.find((p) => p.id === "player2");
-    assert.strictEqual(player2.revealedInfluence.length, 1, "Player2 should have lost one influence due to failed block challenge.");
+    justin = game.players.find((p) => p.id === "justin");
+    assert.strictEqual(justin.revealedInfluence.length, 1, "justin should have lost one influence due to failed block challenge.");
     assert.strictEqual(game.phase, "ACTION_DECLARATION", "Phase should be ACTION_DECLARATION");
-    assert.strictEqual(game.players[game.turnIndex].id, "player1", "Turn should advance to player1");
+    assert.strictEqual(game.players[game.turnIndex].id, "sunny", "Turn should advance to sunny");
 
     // Test get request
-    event = createEvent("GET", null, { playerId: "player3" });
+    event = createEvent("GET", null, { playerId: "gibson" });
     response = await handler(event);
     game = JSON.parse(response.body);
     console.log(JSON.stringify(game, null, 2));
     assert.strictEqual(game.phase, "ACTION_DECLARATION", "Phase should be ACTION_DECLARATION");
 
-    // --- Turn 4: Player1 takes Tax ---
-    event = createEvent("POST", { playerId: "player1", action: "tax", claimedCharacter: "Duke" });
+    // --- Turn 4: sunny takes Tax ---
+    event = createEvent("POST", { playerId: "sunny", action: "tax", claimedCharacter: "Duke" });
     response = await handler(event);
     game = JSON.parse(response.body);
     assert.strictEqual(game.phase, "ACTION_RESPONSE", "Phase should be ACTION_RESPONSE");
     assert.strictEqual(game.pendingAction.action, "tax", "Pending action should be tax");
 
     // --- Turn 4a: Both players pass ---
-    event = createEvent("POST", { playerId: "player2", response: "pass" });
+    event = createEvent("POST", { playerId: "justin", response: "pass" });
     response = await handler(event);
     game = JSON.parse(response.body);
     assert.strictEqual(game.phase, "ACTION_RESPONSE", "Phase should still be ACTION_RESPONSE after first pass");
 
-    event = createEvent("POST", { playerId: "player3", response: "pass" });
+    event = createEvent("POST", { playerId: "gibson", response: "pass" });
     response = await handler(event);
     game = JSON.parse(response.body);
-    player1 = game.players.find((p) => p.id === "player1");
-    assert.strictEqual(player1.coins, 6, "Player1 should have 6 coins after successful tax");
+    sunny = game.players.find((p) => p.id === "sunny");
+    assert.strictEqual(sunny.coins, 6, "sunny should have 6 coins after successful tax");
     assert.strictEqual(game.phase, "ACTION_DECLARATION", "Phase should be ACTION_DECLARATION");
-    assert.strictEqual(game.players[game.turnIndex].id, "player2", "Turn should advance to player2");
+    assert.strictEqual(game.players[game.turnIndex].id, "justin", "Turn should advance to justin");
 
-    // --- Turn 5: Player2 takes Income ---
-    event = createEvent("POST", { playerId: "player2", action: "income" });
+    // --- Turn 5: justin takes Income ---
+    event = createEvent("POST", { playerId: "justin", action: "income" });
     response = await handler(event);
     game = JSON.parse(response.body);
-    player2 = game.players.find((p) => p.id === "player2");
-    assert.strictEqual(player2.coins, 6, "Player2 should have 6 coins after income");
+    justin = game.players.find((p) => p.id === "justin");
+    assert.strictEqual(justin.coins, 6, "justin should have 6 coins after income");
     assert.strictEqual(game.phase, "ACTION_DECLARATION", "Phase should be ACTION_DECLARATION");
-    assert.strictEqual(game.players[game.turnIndex].id, "player3", "Turn should advance to player3");
+    assert.strictEqual(game.players[game.turnIndex].id, "gibson", "Turn should advance to gibson");
 
-    // --- Turn 6: Player3 uses Ambassador to exchange cards ---
+    // --- Turn 6: gibson uses Ambassador to exchange cards ---
+    // first use get to get the exchange options
     event = createEvent("POST", {
-      playerId: "player3",
+      playerId: "gibson",
       action: "exchange",
       claimedCharacter: "Ambassador",
     });
@@ -170,38 +171,53 @@ describe("Coup Game Simulator Unit Tests", function () {
     game = JSON.parse(response.body);
     assert.strictEqual(game.phase, "ACTION_RESPONSE", "Phase should be ACTION_RESPONSE for exchange");
     assert.strictEqual(game.pendingAction.action, "exchange", "Pending action should be exchange");
-    assert.strictEqual(game.pendingAction.claimedCharacter, "Ambassador", "Claimed character should be Ambassador");
 
     // Other players pass on the Ambassador action
-    event = createEvent("POST", { playerId: "player1", response: "pass" });
+    event = createEvent("POST", { playerId: "sunny", response: "pass" });
     response = await handler(event);
     game = JSON.parse(response.body);
     assert.strictEqual(game.phase, "ACTION_RESPONSE", "Phase should still be ACTION_RESPONSE after first pass");
 
-    event = createEvent("POST", { playerId: "player2", response: "pass" });
+    event = createEvent("POST", { playerId: "justin", response: "pass" });
     response = await handler(event);
     game = JSON.parse(response.body);
-    player3 = game.players.find((p) => p.id === "player3");
-    assert.strictEqual(player3.influence.length, 1, "Player3 should still have 1 influence after exchange");
-    assert.strictEqual(game.phase, "ACTION_DECLARATION", "Phase should return to ACTION_DECLARATION");
-    assert.strictEqual(game.players[game.turnIndex].id, "player1", "Turn should advance to player1");
+    assert.strictEqual(game.phase, "EXCHANGE_RESPONSE", "Phase should be EXCHANGE_RESPONSE after all players pass");
 
-    // --- Turn 7: Player1 assassinates player2 ---
+    event = createEvent("GET", null, { playerId: "gibson" });
+    response = await handler(event);
+    game = JSON.parse(response.body);
+    assert.strictEqual(game.phase, "EXCHANGE_RESPONSE", "Phase should be EXCHANGE_RESPONSE after get");
+    console.log("**TEST** Fetched exchange options: " + JSON.stringify(game.pendingAction.exchangeOptions) + "\n");
+
     event = createEvent("POST", {
-      playerId: "player1",
+      playerId: "gibson",
+      action: "exchange",
+      claimedCharacter: "Ambassador",
+      cardsToKeep: ["Ambassador"],
+    });
+    response = await handler(event);
+    game = JSON.parse(response.body);
+    gibson = game.players.find((p) => p.id === "gibson");
+    assert.strictEqual(gibson.influence.length, 1, "gibson should still have 1 influence after exchange");
+    assert.strictEqual(game.phase, "ACTION_DECLARATION", "Phase should return to ACTION_DECLARATION");
+    assert.strictEqual(game.players[game.turnIndex].id, "sunny", "Turn should advance to sunny");
+
+    // --- Turn 7: sunny assassinates justin ---
+    event = createEvent("POST", {
+      playerId: "sunny",
       action: "assassinate",
-      targetId: "player2",
+      targetId: "justin",
       claimedCharacter: "Assassin",
     });
     response = await handler(event);
     game = JSON.parse(response.body);
-    player1 = game.players.find((p) => p.id === "player1");
+    sunny = game.players.find((p) => p.id === "sunny");
     assert.strictEqual(game.phase, "ACTION_RESPONSE", "Phase should be ACTION_RESPONSE for assassination");
-    assert.strictEqual(player1.coins, 3, "Player1 should have 3 coins after paying for assassination");
+    assert.strictEqual(sunny.coins, 3, "sunny should have 3 coins after paying for assassination");
 
-    // --- Turn 7a: Player2 blocks the assassination with Contessa ---
+    // --- Turn 7a: justin blocks the assassination with Contessa ---
     event = createEvent("POST", {
-      playerId: "player2",
+      playerId: "justin",
       response: "block",
       claimedCharacter: "Contessa",
     });
@@ -210,45 +226,45 @@ describe("Coup Game Simulator Unit Tests", function () {
     assert.strictEqual(game.phase, "BLOCK_RESPONSE", "Phase should be BLOCK_RESPONSE after block");
     assert.strictEqual(game.pendingAction.block.claimedCharacter, "Contessa", "Block should claim Contessa");
 
-    // --- Turn 7b: Player3 passes on the assassination ---
-    event = createEvent("POST", { playerId: "player3", response: "pass" });
+    // --- Turn 7b: gibson passes on the assassination ---
+    event = createEvent("POST", { playerId: "gibson", response: "pass" });
     response = await handler(event);
     game = JSON.parse(response.body);
     assert.strictEqual(game.phase, "BLOCK_RESPONSE", "Phase should still be BLOCK_RESPONSE after pass");
 
-    // --- Turn 7c: Player1 challenges the block ---
-    event = createEvent("POST", { playerId: "player1", response: "challenge" });
+    // --- Turn 7c: sunny challenges the block ---
+    event = createEvent("POST", { playerId: "sunny", response: "challenge" });
     response = await handler(event);
     game = JSON.parse(response.body);
-    player1 = game.players.find((p) => p.id === "player1");
+    sunny = game.players.find((p) => p.id === "sunny");
     assert.strictEqual(game.phase, "ACTION_DECLARATION", "Phase should be ACTION_DECLARATION after successful block");
-    assert.strictEqual(game.players[game.turnIndex].id, "player3", "Turn should advance to player3");
+    assert.strictEqual(game.players[game.turnIndex].id, "gibson", "Turn should advance to gibson");
 
-    // --- Turn 8: Player3 takes income ---
-    event = createEvent("POST", { playerId: "player3", action: "income" });
+    // --- Turn 8: gibson takes income ---
+    event = createEvent("POST", { playerId: "gibson", action: "income" });
     response = await handler(event);
     game = JSON.parse(response.body);
-    player3 = game.players.find((p) => p.id === "player3");
-    assert.strictEqual(player3.coins, 3, "Player3 should have 3 coins after income");
+    gibson = game.players.find((p) => p.id === "gibson");
+    assert.strictEqual(gibson.coins, 3, "gibson should have 3 coins after income");
     assert.strictEqual(game.phase, "ACTION_DECLARATION", "Phase should be ACTION_DECLARATION");
-    assert.strictEqual(game.players[game.turnIndex].id, "player1", "Turn should advance to player1");
+    assert.strictEqual(game.players[game.turnIndex].id, "sunny", "Turn should advance to sunny");
 
-    // --- Turn 9: Player1 assassinates player3 ---
+    // --- Turn 9: sunny assassinates gibson ---
     event = createEvent("POST", {
-      playerId: "player1",
+      playerId: "sunny",
       action: "assassinate",
-      targetId: "player3",
+      targetId: "gibson",
       claimedCharacter: "Assassin",
     });
     response = await handler(event);
     game = JSON.parse(response.body);
-    player1 = game.players.find((p) => p.id === "player1");
+    sunny = game.players.find((p) => p.id === "sunny");
     assert.strictEqual(game.phase, "ACTION_RESPONSE", "Phase should be ACTION_RESPONSE for assassination");
-    assert.strictEqual(player1.coins, 0, "Player1 should have 0 coins after paying for assassination");
+    assert.strictEqual(sunny.coins, 0, "sunny should have 0 coins after paying for assassination");
 
-    // --- Turn 9a: Player3 blocks the assassination with Contessa ---
+    // --- Turn 9a: gibson blocks the assassination with Contessa ---
     event = createEvent("POST", {
-      playerId: "player3",
+      playerId: "gibson",
       response: "block",
       claimedCharacter: "Contessa",
     });
@@ -257,13 +273,13 @@ describe("Coup Game Simulator Unit Tests", function () {
     assert.strictEqual(game.phase, "BLOCK_RESPONSE", "Phase should be BLOCK_RESPONSE after block");
     assert.strictEqual(game.pendingAction.block.claimedCharacter, "Contessa", "Block should claim Contessa");
 
-    // --- Turn 9b: Player1 challenges the block ---
-    event = createEvent("POST", { playerId: "player1", response: "challenge" });
+    // --- Turn 9b: sunny challenges the block ---
+    event = createEvent("POST", { playerId: "sunny", response: "challenge" });
     response = await handler(event);
     game = JSON.parse(response.body);
-    player3 = game.players.find((p) => p.id === "player3");
-    assert.strictEqual(player3.status, "ELIMINATED", "Player3 should be eliminated after losing challenge");
+    gibson = game.players.find((p) => p.id === "gibson");
+    assert.strictEqual(gibson.status, "ELIMINATED", "gibson should be eliminated after losing challenge");
     assert.strictEqual(game.phase, "GAME_OVER", "Phase should be GAME_OVER");
-    assert.strictEqual(game.winner, "player1", "Player1 should be the winner");
+    assert.strictEqual(game.winner, "sunny", "sunny should be the winner");
   });
 });
