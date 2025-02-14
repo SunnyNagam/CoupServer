@@ -1,0 +1,58 @@
+flowchart TD
+    subgraph Start
+        A[Start Turn: Active Player's Turn<br/>ACTION_DECLARATION]
+        F[Check action in payload]
+        G[Store pending action in gamestate<br/>Set Phase to ACTION_RESPONSE]
+    end
+
+    subgraph ActionResponse
+        I{Wait for responses from<br/>all other active players}
+        L{resolveActionChallenge:<br/>Success or Fail?}
+        M[Challenge fails:<br/>1. Challenger loses influence<br/>2. Actor exchanges card<br/>3. Set Phase to ACTION_RESOLUTION]
+        O[Challenge succeeds:<br/>1. Actor loses influence<br/>2. Refund coins non-assassination<br/>3. Action canceled]
+    end
+
+    subgraph BlockResponse
+        Q[Store pending block in gamestate<br/>Set Phase to BLOCK_RESPONSE]
+        R{Wait for potential<br/>challenges to block}
+        U{resolveBlockChallenge:<br/>Success or Fail?}
+        V[Block challenge fails:<br/>1. Challenger loses influence<br/>2. Block stands<br/>3. Action canceled]
+        W[Block challenge succeeds:<br/>1. Blocker loses influence<br/>2. Block removed<br/>3. Set Phase to ACTION_RESOLUTION]
+        X[All pass:<br/>1. Block stands<br/>2. Action canceled]
+    end
+
+    subgraph Resolution
+        N[Execute the pending action<br/>executeAction]
+        AA[Call nextTurn<br/>checkGameOver<br/>End Turn]
+    end
+
+    %% Main flow connections
+    A --> F
+    F --> G
+    G --> I
+    G -- "Income or Coup<br/>[immediate]" --> N
+
+    %% Action Response flows
+    I -- "Challenge" --> L
+    L -- "Fails" --> M
+    M --> N
+    L -- "Succeeds" --> O
+    O --> AA
+
+    %% Block Response flows
+    I -- "Block" --> Q
+    Q --> R
+    R -- "Challenge" --> U
+    U -- "Fails" --> V
+    V --> AA
+    U -- "Succeeds" --> W
+    W --> N
+    R -- "All pass" --> X
+    X --> AA
+
+    %% Pass flow
+    I -- "All pass" --> N
+    N --> AA
+
+    %% Styling
+    class I,L,R,U decision;
