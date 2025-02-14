@@ -123,6 +123,13 @@ describe("Coup Game Simulator Unit Tests", function () {
     assert.strictEqual(game.phase, "ACTION_DECLARATION", "Phase should be ACTION_DECLARATION");
     assert.strictEqual(game.players[game.turnIndex].id, "player1", "Turn should advance to player1");
 
+    // Test get request
+    event = createEvent("GET", null, { playerId: "player3" });
+    response = await handler(event);
+    game = JSON.parse(response.body);
+    console.log(JSON.stringify(game, null, 2));
+    assert.strictEqual(game.phase, "ACTION_DECLARATION", "Phase should be ACTION_DECLARATION");
+
     // --- Turn 4: Player1 takes Tax ---
     event = createEvent("POST", { playerId: "player1", action: "tax", claimedCharacter: "Duke" });
     response = await handler(event);

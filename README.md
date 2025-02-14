@@ -31,22 +31,164 @@ Retrieves the current game state. Can be filtered by player ID to hide other pla
 
 Query Parameters:
 
-- `playerId`: (optional) ID of the player requesting the state
+- `playerId`: ID of the player requesting the state
 
-### POST /
-
-Submits a game action or response.
-
-Payload:
+Example response (with query param `playerId="player3"`):
 
 ```
 {
-    "playerId": "string",
-    "action": "string",
-    "response": "string",
-    "claimedCharacter": "string",
-    "targetId": "string"
+  "gameId": "default",
+  "players": [
+    {
+      "id": "player1",
+      "name": "Player 1",
+      "coins": 3,
+      "influenceCount": 2,
+      "revealedInfluence": [],
+      "status": "ACTIVE"
+    },
+    {
+      "id": "player2",
+      "name": "Player 2",
+      "coins": 5,
+      "influenceCount": 1,
+      "revealedInfluence": [
+        "Contessa"
+      ],
+      "status": "ACTIVE"
+    },
+    {
+      "id": "player3",
+      "name": "Player 3",
+      "coins": 2,
+      "influence": [
+        "Ambassador"
+      ],
+      "revealedInfluence": [
+        "Captain"
+      ],
+      "status": "ACTIVE"
+    }
+  ],
+  "courtDeck": [
+    "Duke",
+    "Captain",
+    "Duke",
+    "Assassin",
+    "Contessa",
+    "Contessa",
+    "Ambassador",
+    "Assassin",
+    "Captain"
+  ],
+  "treasury": {
+    "coins": 44
+  },
+  "turnIndex": 0,
+  "turnCount": 4,
+  "phase": "ACTION_DECLARATION",
+  "pendingAction": null,
+  "actionHistory": [
+    {
+      "actionResolved": "income",
+      "actor": "player1"
+    },
+    {
+      "challenge": {
+        "challenger": "player3",
+        "challenged": "player2",
+        "result": "failed",
+        "cardLost": "Captain"
+      }
+    },
+    {
+      "actionResolved": "tax",
+      "actor": "player2"
+    },
+    {
+      "blockDeclared": {
+        "blocker": "player1",
+        "challenged": "player3",
+        "claimedCharacter": "Duke"
+      }
+    },
+    {
+      "blockChallenged": {
+        "challenger": "player2",
+        "blocker": "player1",
+        "result": "failed",
+        "cardLost": "Contessa"
+      }
+    }
+  ],
+  "debug": false
 }
+```
+
+### POST /
+
+Submits a game action or response. The required fields depend on the current game phase.
+
+Payload:
+
+```json
+{
+  "playerId": "string", // Required: ID of the player making the move
+  "action": "string", // Required during ACTION_DECLARATION phase
+  "response": "string", // Required during response phases (challenge/block/pass)
+  "claimedCharacter": "string", // Required for character-specific actions/blocks
+  "targetId": "string" // Required for targeted actions (coup/steal/assassinate)
+}
+```
+
+#### Action Phase (ACTION_DECLARATION)
+
+During a player's turn, they must submit one of these actions:
+
+No Character Required:
+
+- `income`: Collect 1 coin
+- `foreign_aid`: Collect 2 coins (can be blocked by Duke)
+- `coup`: Pay 7 coins to force a player to lose influence (requires targetId)
+
+Character Required (needs claimedCharacter):
+
+- `tax`: Claim Duke to collect 3 coins
+- `assassinate`: Claim Assassin to pay 3 coins and make target lose influence (requires targetId)
+- `steal`: Claim Captain to steal 2 coins from target (requires targetId)
+- `exchange`: Claim Ambassador to exchange cards with the court deck
+
+#### Response Phase (ACTION_RESPONSE)
+
+Other players may respond with:
+
+- `response: "pass"`: Allow the action
+- `response: "challenge"`: Challenge the claimed character
+- `response: "block"`: Block the action (requires claimedCharacter)
+
+#### Block Response Phase (BLOCK_RESPONSE)
+
+Players may respond to a block with:
+
+- `response: "pass"`: Accept the block
+- `response: "challenge"`: Challenge the blocker's claimed character
+
+Example POST requests in a game flow:
+
+```
+// Player 1's turn - declares income
+POST / {"playerId": "player1", "action": "income"}
+
+// Player 2's turn - claims Duke for tax
+POST / {"playerId": "player2", "action": "tax", "claimedCharacter": "Duke"}
+POST / {"playerId": "player1", "response": "pass"}
+POST / {"playerId": "player3", "response": "challenge"}
+
+// Player 3's turn - attempts assassination
+POST / {"playerId": "player3", "action": "assassinate", "claimedCharacter": "Assassin", "targetId": "player1"}
+POST / {"playerId": "player1", "response": "block", "claimedCharacter": "Contessa"}
+POST / {"playerId": "player2", "response": "pass"}
+POST / {"playerId": "player3", "response": "challenge"}
 ```
 
 ## Game Actions
