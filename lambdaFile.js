@@ -836,3 +836,101 @@ async function handlePostRequest(game, event) {
     body: JSON.stringify(game),
   };
 }
+
+// Add this at the bottom of the file
+if (require.main === module) {
+  try {
+    // Check if Express is installed
+    require.resolve("express");
+  } catch (e) {
+    console.error("Express is required but not installed. Please run: npm install express");
+    process.exit(1);
+  }
+
+  const express = require("express");
+  const bodyParser = require("body-parser");
+  const app = express();
+  const PORT = process.env.PORT || 3000;
+
+  // Mock DynamoDB
+  let mockGameState = null;
+
+  // Override the DynamoDB functions with in-memory versions
+  getGameState = async function () {
+    return mockGameState;
+  };
+
+  saveGameState = async function (game) {
+    mockGameState = game;
+    return game;
+  };
+
+  // Middleware to parse JSON bodies
+  app.use(bodyParser.json());
+
+  // Enable CORS
+  app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+
+    if (req.method === "OPTIONS") {
+      res.sendStatus(200);
+    } else {
+      next();
+    }
+  });
+
+  // Handle GET, POST, DELETE requests
+  app.all("/", async (req, res) => {
+    try {
+      const event = {
+        httpMethod: req.method,
+        queryStringParameters: req.query,
+        body: JSON.stringify(req.body),
+      };
+
+      console.log(`Received ${req.method} request:`, req.method === "GET" ? JSON.stringify(req.query) : JSON.stringify(req.body));
+
+      const lambdaResponse = await exports.handler(event);
+
+      // Set response status code
+      res.status(lambdaResponse.statusCode);
+
+      // Set headers
+      if (lambdaResponse.headers) {
+        Object.entries(lambdaResponse.headers).forEach(([key, value]) => {
+          res.header(key, value);
+        });
+      }
+
+      // Send body
+      if (lambdaResponse.body) {
+        try {
+          const parsedBody = JSON.parse(lambdaResponse.body);
+          res.json(parsedBody);
+        } catch (e) {
+          res.send(lambdaResponse.body);
+        }
+      } else {
+        res.end();
+      }
+    } catch (error) {
+      console.error("Error handling request:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Start the server
+  app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+    console.log(`API endpoints:`);
+    console.log(`  GET / - Get game state (use ?playerId=player1 to view as a specific player)`);
+    console.log(`  DELETE / - Start a new game (with optional body for settings)`);
+    console.log(`  POST / - Process game actions (send JSON body)`);
+    console.log(`Example curl commands:`);
+    console.log(`  curl -X DELETE http://localhost:${PORT} -H "Content-Type: application/json" -d '{"playerCount":4}'`);
+    console.log(`  curl "http://localhost:${PORT}?playerId=player1"`);
+    console.log(`  curl -X POST http://localhost:${PORT} -H "Content-Type: application/json" -d '{"playerId":"player1","action":"income"}'`);
+  });
+}
