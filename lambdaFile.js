@@ -104,6 +104,16 @@ function initializeNewGame(settings = {}) {
   });
   console.log("<<<<<<<<<<<<<<<\n");
 
+  // Add formatted history for player's states
+  const formattedHistory = [];
+  formattedHistory.push("\nROUND 1: It's " + players[0].id + "'s turn. Current player states:");
+  for (let player of players) {
+    formattedHistory.push(
+      `\t${player.id}${player.status === "ELIMINATED" ? " (ELIMINATED)" : ""}: has ${player.coins} coins and ${player.influence.length} influence` +
+        (player.revealedInfluence.length ? ` (Exposed: ${player.revealedInfluence.join(", ")})` : "")
+    );
+  }
+
   return {
     gameId: "default",
     players, // array of players
@@ -113,6 +123,7 @@ function initializeNewGame(settings = {}) {
     phase: "ACTION_DECLARATION", // phases: ACTION_DECLARATION, ACTION_RESPONSE, BLOCK_RESPONSE, ACTION_RESOLUTION, GAME_OVER, EXCHANGE_RESPONSE
     pendingAction: null, // holds the current action (and possibly block) info
     actionHistory: [], // log of moves
+    formattedHistory: formattedHistory, // formatted history for display
     debug: false, // debug flag
   };
 }
@@ -132,7 +143,12 @@ function checkGameOver(game) {
   if (activePlayers.length <= 1) {
     game.phase = "GAME_OVER";
     game.winner = activePlayers.length === 1 ? activePlayers[0].id : null;
+    game.formattedHistory.push(`ROUND ${game.turnCount}: GAME OVER, ${game.winner} wins!!!`);
     console.log("============ GAME OVER:", game.winner, "wins!!!");
+    console.log("\nGame History:");
+    game.formattedHistory.forEach((entry) => {
+      console.log(entry);
+    });
   }
   return game;
 }
@@ -162,6 +178,14 @@ function nextTurn(game) {
   } else {
     console.log("\n>>>>>>>>>>>>> TURN " + game.turnCount + ": It is now player " + game.players[nextIndex].id + "'s turn");
   }
+  // Add formatted history for player's states
+  game.formattedHistory.push("\nROUND " + game.turnCount + ": It's " + game.players[nextIndex].id + "'s turn. Current player states:");
+  for (let player of game.players) {
+    game.formattedHistory.push(
+      `\t${player.id}${player.status === "ELIMINATED" ? " (ELIMINATED)" : ""}: has ${player.coins} coins and ${player.influence.length} influence` +
+        (player.revealedInfluence.length ? ` (Exposed: ${player.revealedInfluence.join(", ")})` : "")
+    );
+  }
   return game;
 }
 
@@ -174,26 +198,6 @@ function createHistoryEntry(type, details) {
     details,
     timestamp: new Date().toISOString(),
   };
-}
-
-/**
- * Helper: Format action history for display
- */
-function formatActionHistory(history) {
-  return history.map((entry) => {
-    switch (entry.type) {
-      case "BASIC_ACTION":
-        return `${entry.details.actor} performed ${entry.details.action}`;
-      case "CHALLENGE":
-        return `${entry.details.challenger} challenged ${entry.details.actor}'s ${entry.details.challengedAction} - Challenge ${entry.details.result}`;
-      case "BLOCK":
-        return `${entry.details.blocker} blocked with ${entry.details.claimedCharacter}`;
-      case "BLOCK_CHALLENGE":
-        return `${entry.details.challenger} challenged ${entry.details.blocker}'s block - Challenge ${entry.details.result}`;
-      default:
-        return JSON.stringify(entry);
-    }
-  });
 }
 
 /**
@@ -233,9 +237,6 @@ function filterGameStateForPlayer(game, playerId) {
     }
   }
 
-  // Add formatted history for display.
-  cloned.formattedHistory = formatActionHistory(cloned.actionHistory);
-
   return cloned;
 }
 
@@ -257,7 +258,11 @@ function resolveActionChallenge(game, challengerId, cardToLose = null) {
         actor: actor.id,
         result: "failed",
         cardLost: lostCard,
+        turn: game.turnCount,
       })
+    );
+    game.formattedHistory.push(
+      `ROUND ${game.turnCount}: ${challenger.id} challenged ${actor.id}'s ${pending.action} - Challenge failed, ${challenger.id} loses an influence: ${lostCard}`
     );
     // Actor exchanges the revealed card.
     const idx = actor.influence.indexOf(pending.claimedCharacter);
@@ -285,7 +290,11 @@ function resolveActionChallenge(game, challengerId, cardToLose = null) {
         actor: actor.id,
         result: "succeeded",
         cardLost: lostCard,
+        turn: game.turnCount,
       })
+    );
+    game.formattedHistory.push(
+      `ROUND ${game.turnCount}: ${challenger.id} challenged ${actor.id}'s ${pending.action} - Challenge succeeded, ${actor.id} loses an influence: ${lostCard}`
     );
     // Refund coins for the action (except for assassination).
     if (pending.action !== "assassinate") {
@@ -311,12 +320,8 @@ function resolveBlockChallenge(game, challengerId, cardToLose = null) {
     const challenger = getPlayer(game, challengerId);
     const lostCard = loseInfluence(challenger, cardToLose);
 
-    game.actionHistory.push(
-      createHistoryEntry("BLOCK", {
-        blocker: pending.block.blockerId,
-        action: pending.action,
-        claimedCharacter: pending.block.claimedCharacter,
-      })
+    game.formattedHistory.push(
+      `ROUND ${game.turnCount}: ${challenger.id} challenged ${blocker.id}'s block - Challenge failed, ${challenger.id} loses an influence: ${lostCard}`
     );
     // Block stands: the overall action fails.
     game.pendingAction = null;
@@ -325,13 +330,8 @@ function resolveBlockChallenge(game, challengerId, cardToLose = null) {
   } else {
     // Block challenge succeeds, blocker loses an influence.
     const lostCard = loseInfluence(blocker, cardToLose);
-
-    game.actionHistory.push(
-      createHistoryEntry("BLOCK", {
-        blocker: pending.block.blockerId,
-        action: pending.action,
-        claimedCharacter: pending.block.claimedCharacter,
-      })
+    game.formattedHistory.push(
+      `ROUND ${game.turnCount}: ${challenger.id} challenged ${blocker.id}'s block - Challenge succeeded, ${blocker.id} loses an influence: ${lostCard}`
     );
     // Remove the block so that the original action proceeds.
     pending.block = null;
@@ -353,53 +353,67 @@ function executeAction(game) {
     case "income":
       actor.coins += 1;
       game.actionHistory.push(
-        createHistoryEntry("BASIC_ACTION", {
+        createHistoryEntry("BASIC_ACTION_RESULT", {
           action: "income",
+          turn: game.turnCount,
           actor: actor.id,
         })
       );
+      game.formattedHistory.push(`ROUND ${game.turnCount}: ${actor.id} performed income and gained 1 coin, now has ${actor.coins} coins`);
       break;
     case "coup": {
       const target = getPlayer(game, pending.targetId);
       const lostCard = loseInfluence(target, pending.cardToLose);
       game.actionHistory.push(
-        createHistoryEntry("BASIC_ACTION", {
+        createHistoryEntry("BASIC_ACTION_RESULT", {
           action: "coup",
+          turn: game.turnCount,
           actor: actor.id,
           target: pending.targetId,
           cardLost: lostCard,
         })
+      );
+      game.formattedHistory.push(
+        `ROUND ${game.turnCount}: ${actor.id} performed coup on ${target.id} resulting in ${lostCard} being revealed, now has ${actor.coins} coins`
       );
       break;
     }
     case "foreign_aid":
       actor.coins += 2;
       game.actionHistory.push(
-        createHistoryEntry("BASIC_ACTION", {
+        createHistoryEntry("BASIC_ACTION_RESULT", {
           action: "foreign_aid",
+          turn: game.turnCount,
           actor: actor.id,
         })
       );
+      game.formattedHistory.push(`ROUND ${game.turnCount}: ${actor.id} performed foreign_aid and gained 2 coins, now has ${actor.coins} coins`);
       break;
     case "tax":
       actor.coins += 3;
       game.actionHistory.push(
-        createHistoryEntry("BASIC_ACTION", {
+        createHistoryEntry("BASIC_ACTION_RESULT", {
           action: "tax",
+          turn: game.turnCount,
           actor: actor.id,
         })
       );
+      game.formattedHistory.push(`ROUND ${game.turnCount}: ${actor.id} performed tax and gained 3 coins, now has ${actor.coins} coins`);
       break;
     case "assassinate": {
       const target = getPlayer(game, pending.targetId);
       const lostCard = loseInfluence(target, pending.cardToLose);
       game.actionHistory.push(
-        createHistoryEntry("BASIC_ACTION", {
+        createHistoryEntry("BASIC_ACTION_RESULT", {
           action: "assassinate",
+          turn: game.turnCount,
           actor: actor.id,
           target: pending.targetId,
           cardLost: lostCard,
         })
+      );
+      game.formattedHistory.push(
+        `ROUND ${game.turnCount}: ${actor.id} performed assassination on ${target.id} resulting in ${lostCard} being revealed, now has ${actor.coins} coins`
       );
       break;
     }
@@ -409,12 +423,16 @@ function executeAction(game) {
       target.coins -= amount;
       actor.coins += amount;
       game.actionHistory.push(
-        createHistoryEntry("BASIC_ACTION", {
+        createHistoryEntry("BASIC_ACTION_RESULT", {
           action: "steal",
+          turn: game.turnCount,
           actor: actor.id,
           target: pending.targetId,
           amount: amount,
         })
+      );
+      game.formattedHistory.push(
+        `ROUND ${game.turnCount}: ${actor.id} performed steal from ${target.id} and gained ${amount} coins, now has ${actor.coins} coins`
       );
       break;
     }
@@ -430,6 +448,14 @@ function executeAction(game) {
       pending.exchangeOptions = combined;
       // Instead of executing immediately, move to exchange response phase
       game.phase = "EXCHANGE_RESPONSE";
+      game.actionHistory.push(
+        createHistoryEntry("BASIC_ACTION", {
+          action: "exchange",
+          turn: game.turnCount,
+          actor: actor.id,
+        })
+      );
+      game.formattedHistory.push(`ROUND ${game.turnCount}: ${actor.id} performed exchange and drew new cards`);
       return game;
     }
     default:
@@ -572,12 +598,14 @@ function handleCharacterAction(game, payload, currentPlayer) {
   game.actionHistory.push(
     createHistoryEntry("BASIC_ACTION", {
       action: pending.action,
+      turn: game.turnCount,
       actor: currentPlayer.id,
       coinCost: pending.coinCost,
       claimedCharacter: pending.claimedCharacter,
       target: pending.targetId || null,
     })
   );
+  game.formattedHistory.push(`ROUND ${game.turnCount}: ${currentPlayer.id} is attempting to perform ${pending.action}`);
 
   return game;
 }
@@ -599,6 +627,7 @@ function handleActionResponse(game, payload) {
     game = checkGameOver(game);
     return game;
   }
+
   if (payload.response === "block") {
     if (!pending.targetId && pending.action !== "foreign_aid") {
       throw new Error("No valid target for block.");
@@ -617,14 +646,22 @@ function handleActionResponse(game, payload) {
         blocker: pending.block.blockerId,
         action: pending.action,
         claimedCharacter: pending.block.claimedCharacter,
+        turn: game.turnCount,
       })
+    );
+    game.formattedHistory.push(
+      `ROUND ${game.turnCount}: ${payload.playerId} (claiming ${payload.claimedCharacter}) is attempting to block ${pending.action} from ${pending.actorId}`
     );
     return game;
   }
-  pending.responses[payload.playerId] = "pass";
+
+  pending.responses[payload.playerId] = "pass"; // if not block or challenge, then pass
   const eligible = game.players.filter((p) => p.id !== pending.actorId && p.status === "ACTIVE");
   if (Object.keys(pending.responses).length >= eligible.length) {
     game.phase = "ACTION_RESOLUTION";
+    game.formattedHistory.push(
+      `ROUND ${game.turnCount}: all eligible players have passed and do not block or challenge ${pending.actorId}'s ${pending.action}`
+    );
     console.log("\tAll eligible players have passed, can proceed to action resolution");
     game = executeAction(game);
     if (game.phase === "ACTION_RESOLUTION") {
@@ -660,13 +697,7 @@ function handleBlockResponse(game, payload) {
     const eligible = game.players.filter((p) => p.id !== pending.block.blockerId && p.status === "ACTIVE");
     if (Object.keys(pending.block.responses).length >= eligible.length) {
       // No challenge on block: block stands, so the action is canceled.
-      game.actionHistory.push(
-        createHistoryEntry("BLOCK", {
-          blocker: pending.block.blockerId,
-          action: pending.action,
-          claimedCharacter: pending.block.claimedCharacter,
-        })
-      );
+      game.formattedHistory.push(`ROUND ${game.turnCount}: all players passed, ${pending.block.blockerId}'s block stands, ${pending.action} canceled`);
       game.pendingAction = null;
       game = nextTurn(game);
       game = checkGameOver(game);
@@ -704,8 +735,9 @@ function handleExchangeResponse(game, payload) {
   game.courtDeck = game.courtDeck.concat(returnedCards);
   game.courtDeck = shuffle(game.courtDeck);
   game.actionHistory.push(
-    createHistoryEntry("BASIC_ACTION", {
+    createHistoryEntry("BASIC_ACTION_RESULT", {
       action: "exchange",
+      turn: game.turnCount,
       actor: actor.id,
     })
   );
